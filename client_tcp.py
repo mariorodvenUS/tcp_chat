@@ -33,7 +33,7 @@ def find_hosts():
         hosts = nm.all_hosts()
         hosts.append('192.168.99.34')
         print_progress_bar()  # Llama a la función para imprimir la barra de progreso
-        print(colored("[] Hosts encontrados: ", "green") + str(hosts))
+        print(colored("\n[] Hosts encontrados: ", "green") + str(hosts))
 
         with open('hosts.json', 'w') as file:
             json.dump(hosts, file)
@@ -62,9 +62,14 @@ def ping_hosts():
                 print(colored("\n[+] Pong received from " + addr + " from port " + str(port), "green"))
                 server_ip = addr
         except socket.timeout:
-            print(colored("\n[-] Timeout waiting for ping response from " + host, "red"))
+            print(colored("[-] Timeout waiting for ping response from " + host, "red"))
     ping_sock.close()
-    return server_ip
+    try:
+        return server_ip
+    except UnboundLocalError as e:
+        print(colored("[-] No se encontró el servidor, intenta de nuevo.", "red"))
+        print(colored("[-] Error: " + str(e), "red"))
+        sys.exit()
 
 def tcp_bind():
     try:
