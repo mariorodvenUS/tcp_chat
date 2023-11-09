@@ -12,7 +12,7 @@ WORKDIR /app/server/
 
 RUN git pull
 
-RUN pip3 install -r requirements.txt
+RUN pip3 install termcolor
 
 CMD python3 server_tcp.py
 
