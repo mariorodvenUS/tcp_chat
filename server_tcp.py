@@ -27,13 +27,11 @@ def eco_udp():
         msg, (addr, port) = s.recvfrom(1024)
         print(colored("[] Ping received from " + addr, "green"))
         s.sendto(b'pong', (addr, port))
+        if msg.decode().strip() == 'ping':
+            s.sendto(b'pong', (addr, port))
+            s.close()
     except socket.timeout:
         print(colored("[-] Timeout waiting for ping response, exiting...", "red"))
-        
-
-    if msg.decode().strip() == 'ping':
-        s.sendto(b'pong', (addr, port))
-        s.close()
 
 def set_server(port):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
