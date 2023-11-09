@@ -8,8 +8,5 @@ RUN apt-get update && apt-get install -y \
 
 RUN git clone https://github.com/mariorodvenUS/tcp_chat.git /app
 
-WORKDIR /app/client
+WORKDIR /app/
 
-RUN ls
-
-CMD ["bash"]
