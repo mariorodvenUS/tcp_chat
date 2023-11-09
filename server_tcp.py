@@ -1,12 +1,12 @@
 import socket
 from termcolor import colored
 import sys
-import threading
-import random
+import select
 
 host = ''
 port = 8080
 colors = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+clients = {}
 
 def eco_udp():
     try:
@@ -26,61 +26,60 @@ def eco_udp():
         print(colored("[+] Listening...", "blue"))
         msg, (addr, port) = s.recvfrom(1024)
         print(colored("[] Ping received from " + addr, "green"))
+        s.sendto(b'pong', (addr, port))
     except socket.timeout:
         print(colored("[-] Timeout waiting for ping response, exiting...", "red"))
-        sys.exit()
+        
 
     if msg.decode().strip() == 'ping':
         s.sendto(b'pong', (addr, port))
         s.close()
 
-def handle_client(client_socket, client_address):
-    while True:
-        try:
-            message = client_socket.recv(1024).decode("utf-8")
-            if not message:
-                break
+def set_server(port):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((host, port))
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.listen(10)
+    print(colored("[] Server listening on port " + str(port), "green"))
+    return server
 
-            if client_address[0] not in color_mapping:
-                color = random.choice(colors)
-                color_mapping[client_address[0]] = color
-                colors.remove(color)
-
-            formatted_message = f"[{colored(client_address[0], color_mapping[client_address[0]])}]: {message}"
-            print(formatted_message)
-
-            # Enviar el mensaje a todos los clientes
-            for address, socket in client_sockets.items():
-                if address != client_address:
-                    sender_ip = f"[{colored(client_address[0], color_mapping[client_address[0]])}]"
-                    message_to_send = f"{sender_ip}: {message}"
-                    socket.send(message_to_send.encode("utf-8"))
-
-        except ConnectionResetError:
-            break
-
-    client_socket.close()
-    del client_sockets[client_address]
-
-def start_server():
-    host = ''
-    port = 8080
-
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((host, port))
-    server_socket.listen(25)
-
-    print(colored(f"[*] Listening as {host}:{port}", "blue"))
-
-    while True:
-        client_socket, client_address = server_socket.accept()
-        client_sockets[client_address] = client_socket
-
-        client_handler = threading.Thread(target=handle_client, args=(client_socket, client_address))
-        client_handler.start()
 
 if __name__ == "__main__":
     eco_udp()
-    color_mapping = {}
-    client_sockets = {}
-    start_server()
+    print(colored("[?] Assuming that the port is 8080", "blue"))
+    server_port = 8080
+    server = set_server(server_port)
+    descriptors = [server]
+    while True:
+        (sread, swrite, sexc) = select.select(descriptors, [], [])
+        
+        for sock in sread:
+            if sock == server:
+                conn, addr = server.accept()
+                print(colored("[] Connection from " + str(addr[0]) + " on port " + str(addr[1]), "green"))
+                descriptors.append(conn)
+                clients[conn] = addr
+            else:
+                data = sock.recv(1024)
+                
+                if not data:
+                    host, port = clients[sock]
+                    print(colored("[-] Connection closed by " + str(host) + " on port " + str(port), "red"))
+                    sock.close()
+                    descriptors.remove(sock)
+                    del clients[sock]
+                else:
+                    host, port = clients[sock]
+                    print(colored("[] Received " + str(data.decode().strip()) + " from " + str(host) + " on port " + str(port), "green"))
+                    
+                    for client_socket in clients:
+                        if client_socket != server and client_socket != sock:
+                            try:
+                                client_socket.sendall(data)
+                            except socket.error:
+                                host, port = clients[client_socket]
+                                print(colored("[-] Connection closed by " + str(host) + " on port " + str(port), "red"))
+                                client_socket.close()
+                                descriptors.remove(client_socket)
+                                del clients[client_socket]
+    server.close()

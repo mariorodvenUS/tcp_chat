@@ -1,4 +1,3 @@
-
 import socket
 import sys
 from termcolor import colored
@@ -31,7 +30,6 @@ def find_hosts():
         print(colored("[+] Escaneando red...", "yellow"))
         nm.scan(hosts=range_input, arguments='-n -sP')
         hosts = nm.all_hosts()
-        hosts.append('192.168.99.34')
         print_progress_bar()  # Llama a la función para imprimir la barra de progreso
         print(colored("\n[] Hosts encontrados: ", "green") + str(hosts))
 
@@ -41,6 +39,7 @@ def find_hosts():
         return hosts
 
 def ping_hosts():
+    global server_ip
     try:
         print(colored("[+] Creating socket...", "blue"))
         ping_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -52,10 +51,12 @@ def ping_hosts():
         sys.exit()
 
     for host in found_hosts:
+        
         print(colored("\n[+] Sending pings!", "blue"))
         ping_sock.sendto(b'ping', (host, 8080))
         
         print(colored("[+] Ping sent to " + host, "green"))
+        
         try:
             msg, (addr, port) = ping_sock.recvfrom(1024)
             if msg.decode().strip() == 'pong':
@@ -63,13 +64,9 @@ def ping_hosts():
                 server_ip = addr
         except socket.timeout:
             print(colored("[-] Timeout waiting for ping response from " + host, "red"))
+    
     ping_sock.close()
-    try:
-        return server_ip
-    except UnboundLocalError as e:
-        print(colored("[-] No se encontró el servidor, intenta de nuevo.", "red"))
-        print(colored("[-] Error: " + str(e), "red"))
-        sys.exit()
+
 
 def tcp_bind():
     try:
@@ -78,51 +75,43 @@ def tcp_bind():
     except socket.error as e:
         print(colored("[-] Error creating socket: " + str(e), "red"))
         sys.exit()
-    try:
-        print(colored("[+] Binding socket...", "blue"))
-        tcp_sock.bind(('', 8080))
-        tcp_sock.settimeout(5)
-        print(colored("[] Socket binded successfully!", "green"))
-    except socket.error as e:
-        print(colored("[-] Error binding socket: " + str(e), "red"))
-        sys.exit()
-    try:
-        print(colored("[+] Listening...", "blue"))
-        tcp_sock.listen(1)
-        print(colored("[] Socket listening successfully!", "green"))
-    except socket.error as e:
-        print(colored("[-] Error listening socket: " + str(e), "red"))
-        sys.exit()
-    try:
-        print(colored("[+] Accepting connections...", "blue"))
-        conn, addr = tcp_sock.accept()
-        print(colored("[] Connection accepted from " + addr[0], "green"))
-    except socket.error as e:
-        print(colored("[-] Error accepting connection: " + str(e), "red"))
-        sys.exit()
+    return tcp_sock
+
+def connect_to_server():
+    client = tcp_bind()
+    client.connect((server_ip, 8080))
+    print(colored("[+] Connected to server!", "green"))
+    while True:
+        msg = input(colored("Msg: ", "blue"))
         
-def receive_messages(client_socket):
-    while True:
-        message = client_socket.recv(1024).decode("utf-8")
-        print(message)
+        try:
+            client.sendall(msg.encode())
+            
+            reply = client.recv(1024)
+            print(colored("[] Server reply: " + reply.decode(), "green"))
+        except socket.error as e:
+            print(colored("[-] Error sending data: " + str(e), "red"))
+            sys.exit()
 
-def start_client(server_ip):
-    host = server_ip
-    port = 5555
-
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
-
-    receive_thread = threading.Thread(target=receive_messages, args=(client_socket,))
-    receive_thread.start()
-
-    while True:
-        message = input("Mensaje: ")
-
-        formatted_message = f"[{colored(socket.gethostbyname(socket.gethostname()), 'green')}]: {message}"
-        client_socket.send(formatted_message.encode("utf-8"))        
 
 if __name__ == '__main__':
-        server_ip=ping_hosts()
-        start_client(server_ip)
+    
+    while True:
+        response = input("Do you want to skip the network scan and enter the server's IP manually? [y/n]: ").lower()
+        if response in ['y', 'yes']:
+            server_ip = input(colored("[?] Please, introduce the server's IP", "blue"))
+            connect_to_server()
+            break
+        elif response in ['n', 'no']:
+            ping_hosts()
+            if server_ip == None:
+                server_ip = input(colored("[?] Please, manually introduce the server's IP", "blue"))
+            connect_to_server()
+            break
+        else:
+            print("Please enter a valid option: y/yes or n/no")
+    
+    
+    
+    
     
